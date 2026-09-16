@@ -1,0 +1,15 @@
+{
+  "name": "さんすうチャレンジ",
+  "short_name": "さんすう",
+  "description": "たし算・ひき算をれんしゅうする こども向けアプリ",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFF9F0",
+  "theme_color": "#FFF9F0",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

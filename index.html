@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#FFF9F0">
+<meta name="robots" content="noindex, nofollow">
+<title>さんすうチャレンジ</title>
+
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="さんすう">
+
+<style>
+  :root{
+    --bg:        #FFF9F0;
+    --ink:       #2B2B2B;
+    --sub:       #8A8175;
+    --num-bg:    #4A90D9;
+    --num-bg-on: #2E6DA8;
+    --num-fg:    #FFFFFF;
+    --pass-bg:   #F0A030;
+    --pass-bg-on:#C87D14;
+    --pass-fg:   #4A3000;
+    --ok:        #22A45D;
+    --ok-on:     #1A8049;
+    --ng:        #E5484D;
+    --dot-off:   #E0D8CC;
+    --shadow:    rgba(0,0,0,.15);
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  html,body{
+    height:100%;
+    overflow:hidden;
+    overscroll-behavior:none;
+  }
+
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system, BlinkMacSystemFont, "Hiragino Maru Gothic ProN",
+                "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    -webkit-touch-callout:none;
+    user-select:none;
+    -webkit-user-select:none;
+    touch-action:manipulation;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  /* ---------- 画面の枠組み ---------- */
+  .screen{
+    position:fixed;
+    inset:0;
+    display:none;
+    flex-direction:column;
+    padding:
+      calc(12px + env(safe-area-inset-top))
+      calc(12px + env(safe-area-inset-right))
+      calc(12px + env(safe-area-inset-bottom))
+      calc(12px + env(safe-area-inset-left));
+  }
+  .screen.active{ display:flex; }
+
+  /* ---------- 共通ボタン ---------- */
+  .big-btn{
+    display:block;
+    width:70%;
+    min-width:240px;
+    max-width:380px;
+    height:88px;
+    margin:0 auto;
+    border:none;
+    border-radius:20px;
+    background:var(--ok);
+    color:#fff;
+    font-family:inherit;
+    font-size:clamp(23px,6vmin,32px);
+    font-weight:700;
+    letter-spacing:.05em;
+    box-shadow:0 5px 0 var(--ok-on), 0 7px 12px var(--shadow);
+    cursor:pointer;
+    touch-action:manipulation;
+    transition:transform .06s, box-shadow .06s;
+  }
+  .big-btn:active{
+    transform:translateY(4px);
+    box-shadow:0 1px 0 var(--ok-on), 0 2px 6px var(--shadow);
+  }
+
+  /* ---------- SCR-001 スタート ---------- */
+  #scr-start{ justify-content:center; align-items:center; gap:clamp(20px,5vh,44px); }
+  .title{
+    font-size:clamp(28px,8.5vmin,52px);
+    font-weight:700;
+    letter-spacing:.06em;
+    text-align:center;
+    line-height:1.3;
+  }
+  .deco{
+    font-size:clamp(26px,7.5vmin,44px);
+    font-weight:700;
+    color:var(--num-bg);
+    letter-spacing:.12em;
+  }
+  .hint{ font-size:clamp(16px,4.2vmin,22px); color:var(--sub); text-align:center; }
+
+  .stats-link{
+    position:fixed;
+    right:calc(10px + env(safe-area-inset-right));
+    bottom:calc(10px + env(safe-area-inset-bottom));
+    font-size:13px;
+    color:var(--sub);
+    text-decoration:none;
+    padding:8px 12px;
+    border-radius:12px;
+    background:rgba(0,0,0,.04);
+  }
+  .stats-link:active{ background:rgba(0,0,0,.08); }
+
+  /* ---------- SCR-002 しゅつだい ---------- */
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex:0 0 auto;
+    min-height:26px;
+  }
+  .dots{ display:flex; gap:6px; }
+  .dot{
+    width:12px; height:12px;
+    border-radius:50%;
+    background:var(--dot-off);
+    transition:background .2s;
+  }
+  .dot.done{ background:var(--num-bg); }
+  .dot.now{ background:var(--num-bg); box-shadow:0 0 0 4px rgba(74,144,217,.25); }
+  .counter{ font-size:16px; color:var(--sub); white-space:nowrap; }
+
+  .stage{
+    flex:1 1 auto;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:clamp(4px,1.5vh,14px);
+    min-height:0;
+  }
+  .question{
+    font-size:clamp(40px,12vmin,88px);
+    font-weight:700;
+    letter-spacing:.06em;
+    line-height:1.1;
+    white-space:nowrap;
+  }
+  /* 高さを常に確保してレイアウトのガタつきを防ぐ */
+  .judge{
+    height:clamp(50px,11vmin,88px);
+    font-size:clamp(48px,11vmin,88px);
+    line-height:1;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .judge.ok{ color:var(--ok); }
+  .judge.ng{ color:var(--ng); }
+  .judge.pop{ animation:pop .3s ease-out; }
+  @keyframes pop{
+    0%{ transform:scale(.4); opacity:0; }
+    60%{ transform:scale(1.15); opacity:1; }
+    100%{ transform:scale(1); opacity:1; }
+  }
+  .note{
+    height:clamp(28px,6.5vmin,40px);
+    font-size:clamp(20px,5vmin,30px);
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+  }
+
+  /* ---------- テンキー ---------- */
+  .pad{
+    flex:0 0 auto;
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:10px;
+    width:100%;
+    max-width:460px;
+    margin:0 auto;
+    padding-top:10px;
+  }
+  .pad.locked{ pointer-events:none; }
+
+  .key{
+    aspect-ratio:1/1;
+    min-height:64px;
+    border:none;
+    border-radius:16px;
+    background:var(--num-bg);
+    color:var(--num-fg);
+    font-family:inherit;
+    font-size:clamp(26px,7.5vmin,44px);
+    font-weight:700;
+    box-shadow:0 5px 0 var(--num-bg-on), 0 6px 10px var(--shadow);
+    cursor:pointer;
+    touch-action:manipulation;
+    transition:transform .06s, box-shadow .06s;
+  }
+  .key:active{
+    transform:translateY(4px);
+    box-shadow:0 1px 0 var(--num-bg-on), 0 2px 5px var(--shadow);
+  }
+  .key.pass{
+    background:var(--pass-bg);
+    color:var(--pass-fg);
+    font-size:clamp(17px,4.6vmin,26px);
+    box-shadow:0 5px 0 var(--pass-bg-on), 0 6px 10px var(--shadow);
+  }
+  .key.pass:active{
+    box-shadow:0 1px 0 var(--pass-bg-on), 0 2px 5px var(--shadow);
+  }
+
+  /* ---------- SCR-003 けっか ---------- */
+  #scr-result{ justify-content:center; align-items:center; gap:clamp(14px,3.5vh,30px); }
+  .stars{ display:flex; gap:14px; font-size:clamp(40px,12vmin,72px); line-height:1; }
+  .star{ color:var(--dot-off); }
+  .star.on{ color:var(--ok); animation:pop .4s ease-out backwards; }
+  .star.on:nth-child(2){ animation-delay:.15s; }
+  .star.on:nth-child(3){ animation-delay:.3s; }
+  .score{
+    font-size:clamp(24px,7vmin,40px);
+    font-weight:700;
+    text-align:center;
+    line-height:1.5;
+  }
+  .score b{ color:var(--ok); font-size:1.25em; }
+  .message{ font-size:clamp(18px,5vmin,26px); color:var(--sub); text-align:center; }
+
+  /* 横向きは想定外だが、崩れて操作不能にならないよう高さから逆算して縮める */
+  @media (orientation:landscape){
+    .pad{ max-width:min(460px, calc((100vh - 200px) / 3 * 4)); }
+    .key{ min-height:48px; }
+    .big-btn{ height:72px; }
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ SCR-001 スタート ============ -->
+<section id="scr-start" class="screen active">
+  <h1 class="title">さんすう<br>チャレンジ</h1>
+  <div class="deco">1 ＋ 2 ＝ 3</div>
+  <button id="btn-start" class="big-btn" type="button">はじめる</button>
+  <p class="hint">10もん やってみよう</p>
+  <a href="stats.html" class="stats-link">保護者の方へ（せいかいりつ）</a>
+</section>
+
+<!-- ============ SCR-002 しゅつだい ============ -->
+<section id="scr-quiz" class="screen">
+  <div class="topbar">
+    <div id="dots" class="dots"></div>
+    <div id="counter" class="counter">1もんめ</div>
+  </div>
+
+  <div class="stage">
+    <div id="question" class="question">&nbsp;</div>
+    <div id="judge" class="judge" role="status" aria-live="polite"></div>
+    <div id="note" class="note" role="status" aria-live="polite"></div>
+  </div>
+
+  <div id="pad" class="pad"></div>
+</section>
+
+<!-- ============ SCR-003 けっか ============ -->
+<section id="scr-result" class="screen">
+  <h2 class="title">おつかれさま！</h2>
+  <div id="stars" class="stars"></div>
+  <p id="score" class="score"></p>
+  <p id="message" class="message"></p>
+  <button id="btn-retry" class="big-btn" type="button">もういっかい</button>
+</section>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ===================================================================
+     設定値（GDD 5章・7章に対応）
+     =================================================================== */
+  var QUESTIONS_PER_SET = 10;
+  var WAIT_NEXT         = 900;   // 正解／1回目不正解のあとの待ち時間(ms)
+  var WAIT_REVEAL       = 1600;  // 正解を見せてから次に進むまで(ms)
+
+  /* ===================================================================
+     問題プール（GDD 5.1）
+       たし算 : 0<=a,b<=10 かつ 1<=a+b<=10   → 65通り（0+0 は除外）
+       ひき算 : 0<=b<=a<=10 かつ a-b>=0      → 65通り（0-0 は除外）
+     =================================================================== */
+  function buildPool(){
+    var plus = [], minus = [], a, b;
+    for(a = 0; a <= 10; a++){
+      for(b = 0; b <= 10; b++){
+        if(a + b >= 1 && a + b <= 10) plus.push({ a:a, b:b, op:'+', ans:a + b });
+      }
+    }
+    for(a = 0; a <= 10; a++){
+      for(b = 0; b <= a; b++){
+        if(a === 0 && b === 0) continue;
+        minus.push({ a:a, b:b, op:'-', ans:a - b });
+      }
+    }
+    return { plus:plus, minus:minus };
+  }
+
+  var POOL = buildPool();
+
+  function keyOf(q){ return q.a + q.op + q.b; }
+
+  var byKey = {};
+  POOL.plus.concat(POOL.minus).forEach(function(q){ byKey[keyOf(q)] = q; });
+
+  /* ===================================================================
+     出題デッキ（GDD 5.2 更新／デッキ方式）
+       たし算・ひき算をそれぞれ別デッキとして持ち、1プレイにつき5問ずつ配る。
+       デッキを配り切ったら再シャッフルするため、出題回数の偏りは
+       常に最大1回差に収まる（純粋ランダムだと出やすい・出にくい問題が
+       生まれてしまうのを防ぐため）。
+       デッキの残り札は localStorage に保存し、次回プレイでも引き続き使う。
+     =================================================================== */
+  var PER_OP = QUESTIONS_PER_SET / 2;   // 1プレイあたり たし算/ひき算 各5問
+
+  function shuffle(arr){
+    for(var i = arr.length - 1; i > 0; i--){
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+
+  function loadDeck(storageKey, fullKeys){
+    var deck = null;
+    try{
+      var raw = localStorage.getItem(storageKey);
+      if(raw) deck = JSON.parse(raw);
+    }catch(e){ deck = null; }
+    if(!Array.isArray(deck) || deck.length < PER_OP) deck = shuffle(fullKeys.slice());
+    return deck;
+  }
+
+  function saveDeck(storageKey, deck){
+    try{ localStorage.setItem(storageKey, JSON.stringify(deck)); }catch(e){ /* 保存できなくても続行 */ }
+  }
+
+  function drawFromDeck(storageKey, fullKeys){
+    var deck  = loadDeck(storageKey, fullKeys);
+    var drawn = deck.splice(0, PER_OP);
+    saveDeck(storageKey, deck);
+    return drawn;
+  }
+
+  function pickSet(){
+    var plusKeys  = drawFromDeck('sansuu_deck_plus',  POOL.plus.map(keyOf));
+    var minusKeys = drawFromDeck('sansuu_deck_minus', POOL.minus.map(keyOf));
+    var set = plusKeys.concat(minusKeys).map(function(k){ return byKey[k]; });
+    return shuffle(set);   // たし算・ひき算をセット内で混ぜる
+  }
+
+  /* ===================================================================
+     統計の記録（正解率ダッシュボード用）
+       問題ごとの出題数・結果を累積し、セットごとの結果（せいかい数）も
+       履歴として残す。どちらも localStorage に保存し、stats.html から読む。
+     =================================================================== */
+  function loadPatternStats(){
+    try{
+      var raw = localStorage.getItem('sansuu_pattern_stats');
+      return raw ? JSON.parse(raw) : {};
+    }catch(e){ return {}; }
+  }
+
+  function savePatternStats(stats){
+    try{ localStorage.setItem('sansuu_pattern_stats', JSON.stringify(stats)); }catch(e){ /* 保存できなくても続行 */ }
+  }
+
+  function recordAnswer(q, outcome){
+    var stats = loadPatternStats();
+    var k = keyOf(q);
+    if(!stats[k]) stats[k] = { attempts:0, correctFirst:0, correctSecond:0, wrong:0, passed:0 };
+    stats[k].attempts++;
+    stats[k][outcome]++;
+    savePatternStats(stats);
+  }
+
+  function recordSession(score, total){
+    try{
+      var raw  = localStorage.getItem('sansuu_session_history');
+      var hist = raw ? JSON.parse(raw) : [];
+      hist.push({ date: new Date().toISOString(), score:score, total:total });
+      if(hist.length > 500) hist = hist.slice(hist.length - 500);   // 保存しすぎないための上限
+      localStorage.setItem('sansuu_session_history', JSON.stringify(hist));
+    }catch(e){ /* 保存できなくても続行 */ }
+  }
+
+  /* ===================================================================
+     効果音（GDD 7章）— 音源ファイルを使わず Web Audio API で合成
+     =================================================================== */
+  var audioCtx = null;
+
+  function initAudio(){
+    try{
+      if(!audioCtx){
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if(!AC) return;
+        audioCtx = new AC();
+      }
+    }catch(e){
+      audioCtx = null;   // 音が出せなくてもゲームは続行する
+    }
+  }
+
+  /* suspended（音が止められた状態）のまま鳴らすと、指定時刻がすべて過去に
+     なってしまい無音になる。resume の完了を待ってから鳴らす。
+     ホーム画面から戻った直後・着信後・ロック解除後に効いてくる。 */
+  function withAudio(fn){
+    initAudio();
+    if(!audioCtx) return;
+    if(audioCtx.state === 'suspended'){
+      try{ audioCtx.resume().then(fn)['catch'](function(){}); }catch(e){}
+    }else{
+      fn();
+    }
+  }
+
+  /* iOS はユーザー操作の中でしか音を解禁できない。
+     解禁を確実にするため、聞こえない音を1発鳴らしておく。 */
+  function unlockAudio(){
+    initAudio();
+    if(!audioCtx) return;
+    try{
+      if(audioCtx.state === 'suspended') audioCtx.resume()['catch'](function(){});
+      tone(440, audioCtx.currentTime, 0.01, 'sine', 0.0001);
+    }catch(e){}
+  }
+
+  function tone(freq, startAt, dur, type, vol){
+    if(!audioCtx) return;
+    try{
+      var osc  = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+
+      // 10ms アタック / 80ms リリース（プツッというノイズ防止）
+      var rel = Math.min(0.08, dur * 0.5);
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.linearRampToValueAtTime(vol, startAt + 0.01);
+      gain.gain.setValueAtTime(vol, startAt + dur - rel);
+      gain.gain.linearRampToValueAtTime(0.0001, startAt + dur);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(startAt);
+      osc.stop(startAt + dur + 0.02);
+    }catch(e){ /* 無音で続行 */ }
+  }
+
+  function playCorrect(){          // ピンポン♪（E6 → C6 の下降）
+    withAudio(function(){
+      var t = audioCtx.currentTime + 0.02;   // 必ず「これから先」の時刻から鳴らす
+      tone(1318.5, t,        0.18, 'sine', 0.25);
+      tone(1046.5, t + 0.18, 0.18, 'sine', 0.25);
+    });
+  }
+
+  function playWrong(){            // ブー（D#3 の矩形波）
+    withAudio(function(){
+      tone(155.6, audioCtx.currentTime + 0.02, 0.35, 'square', 0.18);
+    });
+  }
+
+  /* ===================================================================
+     画面の参照
+     =================================================================== */
+  function byId(id){ return document.getElementById(id); }
+
+  var el = {
+    screens : { start:byId('scr-start'), quiz:byId('scr-quiz'), result:byId('scr-result') },
+    dots    : byId('dots'),
+    counter : byId('counter'),
+    question: byId('question'),
+    judge   : byId('judge'),
+    note    : byId('note'),
+    pad     : byId('pad'),
+    stars   : byId('stars'),
+    score   : byId('score'),
+    message : byId('message')
+  };
+
+  function show(name){
+    for(var k in el.screens){
+      if(Object.prototype.hasOwnProperty.call(el.screens, k)){
+        el.screens[k].classList.toggle('active', k === name);
+      }
+    }
+    state.screen = name;
+  }
+
+  /* ===================================================================
+     状態
+     =================================================================== */
+  var state = {
+    screen : 'start',
+    set    : [],
+    index  : 0,
+    attempt: 1,
+    score  : 0,
+    locked : true,
+    timer  : null
+  };
+
+  function setLocked(v){
+    state.locked = v;
+    el.pad.classList.toggle('locked', v);
+  }
+
+  function later(fn, ms){
+    clearTimeout(state.timer);
+    state.timer = setTimeout(fn, ms);
+  }
+
+  /* ===================================================================
+     テンキーの生成（0〜10 ＋ パス ＝ 4列×3行の12マス）
+     =================================================================== */
+  function buildPad(){
+    var frag = document.createDocumentFragment(), i, btn;
+    for(i = 0; i <= 10; i++){
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'key';
+      btn.textContent = String(i);
+      btn.setAttribute('data-value', String(i));
+      btn.setAttribute('aria-label', i + 'とこたえる');
+      frag.appendChild(btn);
+    }
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'key pass';
+    btn.textContent = 'パス';
+    btn.setAttribute('data-pass', '1');
+    btn.setAttribute('aria-label', 'パスする');
+    frag.appendChild(btn);
+
+    el.pad.appendChild(frag);
+  }
+
+  function buildDots(){
+    var frag = document.createDocumentFragment(), i, d;
+    for(i = 0; i < QUESTIONS_PER_SET; i++){
+      d = document.createElement('div');
+      d.className = 'dot';
+      frag.appendChild(d);
+    }
+    el.dots.appendChild(frag);
+  }
+
+  /* ===================================================================
+     ゲーム進行
+     =================================================================== */
+  function startSet(){
+    clearTimeout(state.timer);   // 前のセットのタイマーが生き残らないようにする
+    setLocked(true);
+    state.set     = pickSet();
+    state.index   = 0;
+    state.score   = 0;
+    show('quiz');
+    renderQuestion();
+  }
+
+  function renderQuestion(){
+    var q  = state.set[state.index];
+    var op = q.op === '+' ? '＋' : '－';
+
+    state.attempt = 1;
+    el.question.textContent = q.a + ' ' + op + ' ' + q.b + ' ＝ ?';
+    clearJudge();
+    el.note.textContent = '';
+    el.counter.textContent = (state.index + 1) + 'もんめ';
+
+    var dots = el.dots.children, i;
+    for(i = 0; i < dots.length; i++){
+      dots[i].className = 'dot' +
+        (i < state.index ? ' done' : (i === state.index ? ' now' : ''));
+    }
+
+    setLocked(false);
+  }
+
+  function clearJudge(){
+    el.judge.textContent = '';
+    el.judge.className = 'judge';
+  }
+
+  function showJudge(ok){
+    el.judge.textContent = ok ? '◎' : '×';
+    el.judge.className = 'judge pop ' + (ok ? 'ok' : 'ng');
+  }
+
+  function answer(value){
+    if(state.locked) return;
+    setLocked(true);
+
+    var q = state.set[state.index];
+
+    if(value === q.ans){
+      playCorrect();
+      showJudge(true);
+      if(state.attempt === 1){
+        state.score++;                    // せいかいは1回目のみカウント
+        recordAnswer(q, 'correctFirst');
+      }else{
+        recordAnswer(q, 'correctSecond');
+      }
+      later(next, WAIT_NEXT);
+      return;
+    }
+
+    playWrong();
+    showJudge(false);
+
+    if(state.attempt === 1){
+      // さいちょうせん（もう一回だけ）
+      state.attempt = 2;
+      later(function(){
+        clearJudge();
+        el.note.textContent = 'もういちど！';
+        setLocked(false);
+      }, WAIT_NEXT);
+    }else{
+      recordAnswer(q, 'wrong');
+      reveal(q);
+      later(next, WAIT_REVEAL);
+    }
+  }
+
+  function pass(){
+    if(state.locked) return;
+    setLocked(true);
+    clearJudge();
+    recordAnswer(state.set[state.index], 'passed');
+    reveal(state.set[state.index]);
+    later(next, WAIT_REVEAL);
+  }
+
+  function reveal(q){
+    el.note.textContent = 'こたえは ' + q.ans;
+  }
+
+  function next(){
+    state.index++;
+    if(state.index >= state.set.length){
+      showResult();
+    }else{
+      renderQuestion();
+    }
+  }
+
+  function showResult(){
+    recordSession(state.score, state.set.length);
+
+    var s = state.score, level, msg;
+
+    if(s >= 9)      { level = 3; msg = 'すごい！ かんぺき！'; }
+    else if(s >= 6) { level = 2; msg = 'よくできました！';     }
+    else            { level = 1; msg = 'がんばったね！';       }
+
+    el.stars.innerHTML = '';
+    for(var i = 1; i <= 3; i++){
+      var star = document.createElement('span');
+      star.className = 'star' + (i <= level ? ' on' : '');
+      star.textContent = '★';
+      el.stars.appendChild(star);
+    }
+
+    el.score.innerHTML = '';
+    el.score.appendChild(document.createTextNode(state.set.length + 'もんちゅう'));
+    el.score.appendChild(document.createElement('br'));
+    var b = document.createElement('b');
+    b.textContent = String(s);
+    el.score.appendChild(b);
+    el.score.appendChild(document.createTextNode('もん せいかい！'));
+
+    el.message.textContent = msg;
+    show('result');
+  }
+
+  /* ===================================================================
+     入力（pointerup で反応 ＝ 指を離したとき / GDD 5.3）
+     =================================================================== */
+  /* タッチでは「最初に触れた要素」に指が固定される（暗黙のポインタキャプチャ）ため、
+     指をずらして離しても押した扱いになってしまう。それを解除したうえで、
+       ・離した位置がボタンの上か
+       ・押し始めたときと同じ問題・同じ回数か
+     の2点を確認してから回答を確定する。
+     これで「間違えたから指をずらして離す」が効くようになり、
+     前の問題から置きっぱなしの指が次の問題に勝手に答える事故も防げる。 */
+  var press = null;
+
+  el.pad.addEventListener('pointerdown', function(ev){
+    var btn = ev.target.closest ? ev.target.closest('.key') : null;
+    if(!btn || state.locked){ press = null; return; }
+    try{
+      if(btn.hasPointerCapture && btn.hasPointerCapture(ev.pointerId)){
+        btn.releasePointerCapture(ev.pointerId);
+      }
+    }catch(e){}
+    press = { id:ev.pointerId, btn:btn, index:state.index, attempt:state.attempt };
+  });
+
+  window.addEventListener('pointerup', function(ev){
+    var p = press;
+    press = null;
+    if(!p || p.id !== ev.pointerId) return;
+    if(state.locked) return;
+    if(p.index !== state.index || p.attempt !== state.attempt) return;  // 問題をまたいだ指は無効
+    var over = document.elementFromPoint(ev.clientX, ev.clientY);
+    if(!over || !p.btn.contains(over)) return;                          // 指を離した場所がボタンの外なら無効
+    ev.preventDefault();
+    if(p.btn.getAttribute('data-pass')) pass();
+    else answer(parseInt(p.btn.getAttribute('data-value'), 10));
+  });
+
+  window.addEventListener('pointercancel', function(){ press = null; });
+
+  byId('btn-start').addEventListener('pointerup', function(ev){
+    ev.preventDefault();
+    unlockAudio();
+    startSet();
+  });
+
+  byId('btn-retry').addEventListener('pointerup', function(ev){
+    ev.preventDefault();
+    unlockAudio();
+    startSet();
+  });
+
+  // PC 用のキーボード操作（補助）
+  document.addEventListener('keydown', function(ev){
+    if(ev.repeat) return;
+    if(ev.metaKey || ev.ctrlKey || ev.altKey) return;   // Ctrl+1 等のショートカットで誤回答しない
+
+    if(state.screen === 'quiz'){
+      if(ev.key >= '0' && ev.key <= '9'){ answer(parseInt(ev.key, 10)); return; }
+      if(ev.key === 'p' || ev.key === 'P'){ pass(); return; }
+    }else if(ev.key === 'Enter' || ev.key === ' '){
+      ev.preventDefault();
+      unlockAudio();
+      startSet();
+    }
+  });
+
+  // iOS のダブルタップズームを抑止（CSS の touch-action の保険）
+  document.addEventListener('gesturestart', function(ev){ ev.preventDefault(); });
+
+  // 長押しでメニューが出ないようにする（PC・Android 向けの保険）
+  document.addEventListener('contextmenu', function(ev){ ev.preventDefault(); });
+
+  // ホーム画面から戻ったときに音が止まったままにならないようにする
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden && audioCtx && audioCtx.state === 'suspended'){
+      try{ audioCtx.resume()['catch'](function(){}); }catch(e){}
+    }
+  });
+
+  /* ===================================================================
+     起動
+     =================================================================== */
+  buildPad();
+  buildDots();
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', function(){
+      // scope: このフォルダ配下だけを担当させる
+      // updateViaCache: sw.js 自体がキャッシュから読まれて更新が届かなくなるのを防ぐ
+      navigator.serviceWorker.register('sw.js', { scope:'./', updateViaCache:'none' })
+        ['catch'](function(){ /* 失敗しても動く */ });
+    });
+  }
+})();
+</script>
+</body>
+</html>
