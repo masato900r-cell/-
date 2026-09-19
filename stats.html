@@ -55,6 +55,9 @@
   tr:last-child td{border-bottom:none;}
   footer{font-size:12px;color:var(--sub);line-height:1.7;border-top:1px solid var(--border);padding-top:16px;}
   .empty-state{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:40px 20px;text-align:center;color:var(--sub);font-size:14px;line-height:1.8;}
+  .sync-box{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin-bottom:18px;}
+  .sync-box button{font:inherit;font-size:12px;color:var(--num);background:none;border:1px solid var(--border);border-radius:10px;padding:5px 10px;cursor:pointer;}
+  .sync-box b{color:var(--ink);}
 </style>
 </head>
 <body>
@@ -65,9 +68,9 @@
     <p class="note" id="updatedNote"></p>
   </header>
 
-  <div id="empty" class="empty-state" style="display:none;">
-    まだプレイ記録がありません。<br>お子さまが「さんすうチャレンジ」を1回プレイすると、ここに結果が表示されます。
-  </div>
+  <div class="sync-box" id="syncBox"></div>
+
+  <div id="empty" class="empty-state" style="display:none;"></div>
 
   <div id="content">
     <section>
@@ -155,6 +158,90 @@
   var DECK_SIZE   = POOL.plus.length;          // 65
   var CYCLE_PLAYS = DECK_SIZE / PER_OP;        // 13
 
+  /* ===================================================================
+     複数端末での同期（任意機能）
+     =================================================================== */
+  var SYNC_URL = '';   // ← index.html と同じURLに書き換える
+
+  function getSyncPin(){
+    try{ return localStorage.getItem('sansuu_sync_pin') || ''; }catch(e){ return ''; }
+  }
+
+  function setSyncPin(raw){
+    var pin = String(raw).trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    if(pin.length < 4){ window.alert('4文字以上の半角英数字にしてください。'); return false; }
+    try{ localStorage.setItem('sansuu_sync_pin', pin); }catch(e){}
+    return true;
+  }
+
+  function loadSyncQueue(){
+    try{
+      var raw = localStorage.getItem('sansuu_sync_queue');
+      return raw ? JSON.parse(raw) : [];
+    }catch(e){ return []; }
+  }
+
+  function saveSyncQueue(queue){
+    try{ localStorage.setItem('sansuu_sync_queue', JSON.stringify(queue)); }catch(e){}
+  }
+
+  function queueSyncEvent(evt){
+    var queue = loadSyncQueue();
+    queue.push(evt);
+    if(queue.length > 1000) queue = queue.slice(queue.length - 1000);
+    saveSyncQueue(queue);
+  }
+
+  function sendSyncEvent(evt){
+    var pin = getSyncPin();
+    if(!pin || !SYNC_URL) return Promise.resolve(false);
+    evt.pin = pin;
+    return fetch(SYNC_URL + '/sync', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(evt)
+    }).then(function(res){ return res.ok; })['catch'](function(){ return false; });
+  }
+
+  function flushSyncQueue(){
+    var pin = getSyncPin();
+    if(!pin || !SYNC_URL) return Promise.resolve();
+    var queue = loadSyncQueue();
+    if(queue.length === 0) return Promise.resolve();
+    saveSyncQueue([]);
+    return Promise.all(queue.map(function(evt){
+      return sendSyncEvent(evt).then(function(ok){ if(!ok) queueSyncEvent(evt); });
+    }));
+  }
+
+  function fetchRemoteData(){
+    var pin = getSyncPin();
+    if(!pin || !SYNC_URL) return Promise.resolve(null);
+    return fetch(SYNC_URL + '/data?pin=' + encodeURIComponent(pin))
+      .then(function(res){ return res.ok ? res.json() : null; })
+      ['catch'](function(){ return null; });
+  }
+
+  function renderSyncBox(){
+    var pin = getSyncPin();
+    var box = document.getElementById('syncBox');
+    if(!SYNC_URL){ box.innerHTML = ''; return; }
+
+    if(pin){
+      box.innerHTML = '同期コード：<b>' + pin + '</b> <button type="button" id="pinChangeBtn">変更</button>';
+      document.getElementById('pinChangeBtn').addEventListener('click', function(){
+        var next = window.prompt('同期コード（4〜10文字の半角英数字）を入力してください。他の端末にも同じコードを入れると記録が共有されます。', pin);
+        if(next && setSyncPin(next)) location.reload();
+      });
+    }else{
+      box.innerHTML = 'この端末の記録はまだ他の端末と共有されていません。 <button type="button" id="pinSetBtn">同期コードを設定</button>';
+      document.getElementById('pinSetBtn').addEventListener('click', function(){
+        var next = window.prompt('同期コード（4〜10文字の半角英数字）を決めてください。他の端末にも同じコードを入力すると、記録が共有されます。');
+        if(next && setSyncPin(next)) location.reload();
+      });
+    }
+  }
+
   function loadPatternStats(){
     try{
       var raw = localStorage.getItem('sansuu_pattern_stats');
@@ -169,22 +256,36 @@
     }catch(e){ return []; }
   }
 
-  var patternStats = loadPatternStats();
-  var sessions     = loadSessionHistory();
+  renderSyncBox();
 
-  if(sessions.length === 0){
-    document.getElementById('empty').style.display   = 'block';
-    document.getElementById('content').style.display = 'none';
-    return;
-  }
+  flushSyncQueue().then(function(){
+    return fetchRemoteData();
+  }).then(function(remote){
+    var pin = getSyncPin();
+    var patternStats = remote ? remote.patternStats : loadPatternStats();
+    var sessions     = remote ? remote.sessions     : loadSessionHistory();
+    var scope = remote ? 'remote' : (pin ? 'offline' : 'local');
+    renderDashboard(patternStats || {}, sessions || [], scope);
+  });
 
-  function statsFor(q){
-    var s = patternStats[keyOf(q)] || { attempts:0, correctFirst:0 };
-    return { a:q.a, b:q.b, op:q.op, attempts:s.attempts || 0, correct:s.correctFirst || 0 };
-  }
+  function renderDashboard(patternStats, sessions, scope){
+    if(!sessions.length){
+      var msg = scope === 'offline'
+        ? 'オンラインに接続できないため、同期データを取得できませんでした。<br>接続後にもう一度開いてください。'
+        : 'まだプレイ記録がありません。<br>お子さまが「さんすうチャレンジ」を1回プレイすると、ここに結果が表示されます。';
+      document.getElementById('empty').innerHTML = msg;
+      document.getElementById('empty').style.display   = 'block';
+      document.getElementById('content').style.display = 'none';
+      return;
+    }
 
-  var plusData  = POOL.plus.map(statsFor);
-  var minusData = POOL.minus.map(statsFor);
+    function statsFor(q){
+      var s = patternStats[keyOf(q)] || { attempts:0, correctFirst:0 };
+      return { a:q.a, b:q.b, op:q.op, attempts:s.attempts || 0, correct:s.correctFirst || 0 };
+    }
+
+    var plusData  = POOL.plus.map(statsFor);
+    var minusData = POOL.minus.map(statsFor);
 
   function sum(data, key){ return data.reduce(function(s, d){ return s + d[key]; }, 0); }
   function rateOf(d){ return d.attempts ? Math.round(d.correct / d.attempts * 100) : 0; }
@@ -299,7 +400,9 @@
   var last = sessions[sessions.length - 1];
   var lastDate = new Date(last.date);
   var lastStr = isNaN(lastDate.getTime()) ? '' : (lastDate.getMonth() + 1) + '/' + lastDate.getDate();
-  document.getElementById('updatedNote').textContent = '全 ' + sessions.length + ' プレイの記録（最新プレイ：' + lastStr + '）';
+  var scopeLabel = scope === 'remote' ? '全端末合算' : (scope === 'offline' ? 'この端末のみ・オフライン中' : 'この端末のみ');
+  document.getElementById('updatedNote').textContent = scopeLabel + ' / 全 ' + sessions.length + ' プレイの記録（最新プレイ：' + lastStr + '）';
+  }
 })();
 </script>
 </body>

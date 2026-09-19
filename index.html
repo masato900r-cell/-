@@ -380,6 +380,61 @@
   }
 
   /* ===================================================================
+     複数端末での同期（任意機能）
+       stats.html で「同期コード」を設定していれば、答えるたび・セットが
+       終わるたびに Cloudflare Worker へ送信し、他の端末とデータを共有する。
+       同期コード未設定、またはオフラインなら、今まで通り端末内だけで完結
+       する（ゲーム進行を止めないよう、送信は常にベストエフォート）。
+     =================================================================== */
+  var SYNC_URL = '';   // ← Workerをデプロイしたら、そのURLに書き換える（例: 'https://sansuu-sync.xxxx.workers.dev'）
+
+  function getSyncPin(){
+    try{ return localStorage.getItem('sansuu_sync_pin') || ''; }catch(e){ return ''; }
+  }
+
+  function loadSyncQueue(){
+    try{
+      var raw = localStorage.getItem('sansuu_sync_queue');
+      return raw ? JSON.parse(raw) : [];
+    }catch(e){ return []; }
+  }
+
+  function saveSyncQueue(queue){
+    try{ localStorage.setItem('sansuu_sync_queue', JSON.stringify(queue)); }catch(e){}
+  }
+
+  function queueSyncEvent(evt){
+    var queue = loadSyncQueue();
+    queue.push(evt);
+    if(queue.length > 1000) queue = queue.slice(queue.length - 1000);   // 溜まりすぎ防止
+    saveSyncQueue(queue);
+  }
+
+  function sendSyncEvent(evt){
+    var pin = getSyncPin();
+    if(!pin || !SYNC_URL) return;
+    evt.pin = pin;
+    fetch(SYNC_URL + '/sync', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(evt)
+    }).then(function(res){
+      if(!res.ok) queueSyncEvent(evt);
+    })['catch'](function(){
+      queueSyncEvent(evt);   // オフライン等で送れなければキューに積んで後で再送
+    });
+  }
+
+  function flushSyncQueue(){
+    var pin = getSyncPin();
+    if(!pin || !SYNC_URL) return;
+    var queue = loadSyncQueue();
+    if(queue.length === 0) return;
+    saveSyncQueue([]);   // 先に空にしておき、二重送信を避ける
+    queue.forEach(function(evt){ sendSyncEvent(evt); });
+  }
+
+  /* ===================================================================
      統計の記録（正解率ダッシュボード用）
        問題ごとの出題数・結果を累積し、セットごとの結果（せいかい数）も
        履歴として残す。どちらも localStorage に保存し、stats.html から読む。
@@ -402,16 +457,19 @@
     stats[k].attempts++;
     stats[k][outcome]++;
     savePatternStats(stats);
+    sendSyncEvent({ type:'answer', key:k, outcome:outcome });
   }
 
   function recordSession(score, total){
+    var entry = { date: new Date().toISOString(), score:score, total:total };
     try{
       var raw  = localStorage.getItem('sansuu_session_history');
       var hist = raw ? JSON.parse(raw) : [];
-      hist.push({ date: new Date().toISOString(), score:score, total:total });
+      hist.push(entry);
       if(hist.length > 500) hist = hist.slice(hist.length - 500);   // 保存しすぎないための上限
       localStorage.setItem('sansuu_session_history', JSON.stringify(hist));
     }catch(e){ /* 保存できなくても続行 */ }
+    sendSyncEvent({ type:'session', date:entry.date, score:entry.score, total:entry.total });
   }
 
   /* ===================================================================
@@ -789,6 +847,8 @@
      =================================================================== */
   buildPad();
   buildDots();
+  flushSyncQueue();
+  window.addEventListener('online', flushSyncQueue);
 
   if('serviceWorker' in navigator){
     window.addEventListener('load', function(){

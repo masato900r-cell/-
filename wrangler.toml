@@ -1,0 +1,7 @@
+name = "sansuu-sync"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+kv_namespaces = [
+  { binding = "SANSUU_KV", id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID" }
+]
