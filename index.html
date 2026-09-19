@@ -386,7 +386,7 @@
        同期コード未設定、またはオフラインなら、今まで通り端末内だけで完結
        する（ゲーム進行を止めないよう、送信は常にベストエフォート）。
      =================================================================== */
-  var SYNC_URL = '';   // ← Workerをデプロイしたら、そのURLに書き換える（例: 'https://sansuu-sync.xxxx.workers.dev'）
+  var SYNC_URL = 'https://sansuu-sync.sansuu-app.workers.dev';   // ← Workerをデプロイしたら、そのURLに書き換える（例: 'https://sansuu-sync.xxxx.workers.dev'）
 
   function getSyncPin(){
     try{ return localStorage.getItem('sansuu_sync_pin') || ''; }catch(e){ return ''; }

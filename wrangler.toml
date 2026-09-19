@@ -3,5 +3,5 @@ main = "worker.js"
 compatibility_date = "2026-09-01"
 
 kv_namespaces = [
-  { binding = "SANSUU_KV", id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID" }
+  { binding = "SANSUU_KV", id = "f3a78af8fde64542bc1cdc42924e2f34" }
 ]

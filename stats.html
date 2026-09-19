@@ -161,7 +161,7 @@
   /* ===================================================================
      複数端末での同期（任意機能）
      =================================================================== */
-  var SYNC_URL = '';   // ← index.html と同じURLに書き換える
+  var SYNC_URL = 'https://sansuu-sync.sansuu-app.workers.dev';   // ← index.html と同じURLに書き換える
 
   function getSyncPin(){
     try{ return localStorage.getItem('sansuu_sync_pin') || ''; }catch(e){ return ''; }
